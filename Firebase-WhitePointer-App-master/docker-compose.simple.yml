@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: whitepointer_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - postgres_simple_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev_user -d whitepointer_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  whitepointer-app:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "9003:9003"
+    environment:
+      - NODE_ENV=development
+      - POSTGRES_URL=postgresql://dev_user:dev_password@postgres:5432/whitepointer_dev
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=whitepointer_dev
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+      - DATABASE_DEBUG=true
+      - DATABASE_QUERY_LOGGING=true
+      - NEXT_PUBLIC_BASE_URL=http://localhost:9003
+      - NEXT_PUBLIC_DEBUG_MODE=true
+      - NEXT_DEBUG=true
+    volumes:
+      - .:/app
+      - node_modules_simple:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    command: sh -c "npm install && npx next dev --turbopack --port 9003 --hostname 0.0.0.0"
+
+volumes:
+  postgres_simple_data:
+  node_modules_simple:

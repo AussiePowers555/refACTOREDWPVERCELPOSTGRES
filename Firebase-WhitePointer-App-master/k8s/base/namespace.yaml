@@ -1,0 +1,27 @@
+# Namespace configuration for WhitePointer microservices
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: whitepointer-production
+  labels:
+    app: whitepointer
+    environment: production
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: whitepointer-staging
+  labels:
+    app: whitepointer
+    environment: staging
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: whitepointer-dev
+  labels:
+    app: whitepointer
+    environment: dev
+    istio-injection: enabled

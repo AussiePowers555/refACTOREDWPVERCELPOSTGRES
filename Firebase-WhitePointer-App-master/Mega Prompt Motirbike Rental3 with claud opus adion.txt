@@ -1,0 +1,2299 @@
+anaaMEGA PROMPT: Motorbike Rental Management System - Complete Specification
+EXECUTIVE SUMMARY
+You are tasked with building a comprehensive Motorbike Rental Management System that handles the complete lifecycle of motorcycle rental cases following vehicle accidents. This system manages client information, at-fault party details, bike assignments, financial tracking, document management, insurance company interactions, and collections processes.
+
+The system is designed for a business that provides replacement motorcycles to clients whose bikes have been damaged in accidents, with costs typically recovered from at-fault parties' insurance companies.
+
+PRODUCT REQUIREMENTS DOCUMENT (PRD)
+1. SYSTEM OVERVIEW
+1.1 Core Purpose
+Manage motorcycle rental cases for accident victims
+Track financial aspects (invoicing, settlements, payments)
+Handle document generation and digital signatures
+Automate insurance claim processes
+Manage bike fleet inventory and assignments
+Handle collections for outstanding payments
+
+
+
+# MOTORBIKE RENTAL MANAGEMENT SYSTEM - COMPREHENSIVE SPECIFICATION V2
+## One-Shot Rebuild Prompt for LLM
+
+### SYSTEM OVERVIEW
+Build a comprehensive web-based motorbike rental management system for White Pointer, a company specializing in motorcycle rentals for not-at-fault accident victims in Australia. The system manages cases, fleet, finances, communications, and document workflows with integrated digital signatures.
+
+### TECHNOLOGY STACK
+- **Frontend**: Next.js 15.3.3 with TypeScript, React 18, Turbopack
+- **Styling**: Tailwind CSS with shadcn/ui component library
+- **Database**: SQLite with better-sqlite3 (fallback to localStorage for development)
+- **Backend Storage**: Firebase/Firestore (with local fallbacks)
+- **Authentication**: Custom JWT-based with role-based access control
+- **PDF Generation**: React-PDF
+- **Email Service**: Brevo (SendinBlue) API
+- **Form Integration**: JotForm API with webhook support
+- **File Storage**: Local filesystem with Firebase Storage backup
+
+### DATABASE SCHEMA
+
+#### Core Entities:
+
+1. **Cases** (Primary Entity)
+   - ID, case_number (format: CASE-######)
+   - Status progression: New Matter → Customer Contacted → Awaiting Approval → Bike Delivered → Bike Returned → Demands Sent → Awaiting Settlement → Settlement Agreed → Paid → Closed
+   - Not-at-fault (NAF) party details: name, phone, email, address, suburb, state, postcode, DOB, licence details, claim number, insurance company, vehicle details
+   - At-fault (AF) party details: same fields as NAF
+   - Assignments: lawyer_id, rental_company_id, bike_id
+   - Financial summary: invoiced, reserve, agreed, paid
+   - Accident details: date, time, description, location, diagram
+   - Timestamps: created_date, modified_date, last_updated
+
+2. **Contacts**
+   - Types: Client, Lawyer, Insurer, Repairer, Rental Company, Service Center, Other
+   - Fields: name, company, type, phone, email, address, notes
+
+3. **Bikes** (Fleet Management)
+   - Registration, make, model, year, color, VIN
+   - Status: available, assigned, maintenance, retired
+   - Assignment details: case_number, start_date, end_date
+   - Location tracking, service_center_id
+   - Daily rates and additional fees
+
+4. **User Accounts**
+   - Roles: admin, developer, lawyer, rental_company, workspace_user
+   - Status: active, pending_password_change, disabled
+   - Linked to contact_id for role-based access
+
+5. **Documents**
+   - Types: claims, not-at-fault-rental, certis-rental, authority-to-act, direction-to-pay, signed-agreement
+   - File management with signatures, versioning, encryption
+
+6. **Financial Records**
+   - Per-case financial tracking
+   - Invoice amounts, settlements, payments, outstanding balances
+
+7. **Communication Logs**
+   - Types: Email, Phone, SMS, Letter, Meeting, Other
+   - Direction: inbound/outbound
+   - Priority levels, follow-up tracking
+
+8. **Commitments**
+   - Case-based deadlines and tasks
+   - Due dates, notes, status tracking
+
+9. **Workspaces**
+   - Organization units for lawyers/rental companies
+   - Main Workspace shows all cases
+   - Regular workspaces filter by assignment
+
+### GUI COMPONENTS & LAYOUTS
+
+#### 1. **Login Page** (`/login`)
+- Clean centered card design
+- Email/password fields with validation
+- "Remember me" checkbox
+- Error messaging for failed attempts
+- Redirects to dashboard on success
+
+#### 2. **Main Layout** (Sidebar Navigation)
+- **Logo**: PBikeRescue with bike icon
+- **Main Navigation**:
+  - Dashboard (home icon)
+  - Workspaces (grid icon) - admin only
+  - Case Management (briefcase icon)
+  - Fleet Tracking (bike icon) - admin only
+  - Financials (banknote icon) - admin only
+  - Commitments (clipboard icon) - admin only
+  - Contacts (contact icon) - admin only
+  - Documents (file icon)
+  - Interactions (message icon)
+  - AI Email (mail icon) - admin only
+- **Settings Section**:
+  - User Management (shield icon) - admin only
+  - Subscriptions (gem icon) - admin only
+  - Settings (gear icon)
+- **User Header**: Shows current user email and logout button
+
+#### 3. **Dashboard** (`/`)
+- **KPI Cards** (4-column grid):
+  - Total Cases (count + trend)
+  - Bikes Available (X/Y format + percentage)
+  - Overdue Payments (amount + case count)
+  - Active Insurance Claims (count + status)
+- **Recent Cases Table**:
+  - Columns: Case Number, Client, Assigned Lawyer, Assigned Rental Company, Status, Last Updated
+  - Status badges with color coding
+  - Clickable rows for case details
+- **Fleet Status Chart**:
+  - Vertical bar chart showing Available, Rented, Maintenance counts
+  - Interactive tooltips
+
+#### 4. **Case List** (`/cases`)
+- **Header**: "Case List" title + "New Case" button
+- **Search Bar**: Global search across all case fields
+- **Filter Pills**: Active workspace shown as removable pill
+- **Results Count**: "Showing X of Y cases"
+- **Sortable Table Headers**:
+  - Case Number, NAF Client, Status, Last Updated
+  - Sort indicators (up/down arrows)
+- **Expandable Rows** showing:
+  - Contact details (phone, email, address)
+  - At-fault party information
+  - Insurance details
+  - Assigned lawyer/rental company dropdowns
+  - Financial summary (Invoiced, Reserve, Agreed, Paid)
+  - Action buttons: View Details, Communications Log, Delete
+- **Mock Data Button**: Create 5 sample cases (dev mode)
+
+#### 5. **Case Detail** (`/cases/[caseId]`)
+- **Back Navigation**: Arrow + "Back to Case List"
+- **Header**: Case number + status badge
+- **Tab Navigation**:
+  - Details | Gallery | PDFs | Upload
+- **Details Tab**:
+  - Editable form sections:
+    - Not-at-Fault Party Details
+    - At-Fault Party Details  
+    - Accident Information
+    - Case Assignments
+    - Financial Summary
+  - Save/Cancel buttons
+- **Gallery Tab**: Image grid with lightbox viewer
+- **PDFs Tab**: Document list with inline viewer
+- **Upload Tab**: Drag-drop file upload area
+- **Sidebar Cards**:
+  - Assigned Bike (if any)
+  - Communication Log
+  - AI Email Generator
+
+#### 6. **Fleet Page** (`/fleet`)
+- **Search Bar**: Filter bikes by registration/details
+- **Bike Cards** (responsive grid):
+  - Image placeholder
+  - Registration, Make/Model, Year
+  - Status badge (color-coded)
+  - Location display
+  - Daily rate
+  - Assignment info (if assigned)
+  - Action buttons:
+    - Edit, Assign to Case (if available)
+    - Return Bike (if assigned)
+    - Prepare Agreement (if assigned)
+    - Service Center dropdown
+    - Delete (with confirmation)
+
+#### 7. **Financials** (`/financials`)
+- **Summary Cards**: Total Outstanding, Total Paid, Average Case Value
+- **Financial Table**:
+  - Columns: Case, Client, Invoiced, Agreed, Paid, Outstanding, Status
+  - Sorting and filtering options
+  - Export to CSV functionality
+
+#### 8. **Commitments** (`/commitments`)
+- **Calendar View**: Monthly calendar with commitment markers
+- **List View**: 
+  - Grouped by date
+  - Case number, note, due date
+  - Mark complete functionality
+- **Add Commitment**: Modal with case selector, date picker, note field
+
+#### 9. **Contacts** (`/contacts`)
+- **Contact Type Tabs**: All, Lawyers, Rental Companies, Service Centers, etc.
+- **Contact Cards**:
+  - Name, company, type badge
+  - Contact details (phone, email)
+  - Notes section
+  - Edit/Delete actions
+- **Add Contact Modal**: Form with type-specific fields
+
+#### 10. **Documents** (`/documents`)
+- **Document Grid**: 
+  - File type icons
+  - Filename, size, upload date
+  - Case association
+  - Download/View/Delete actions
+- **Upload Area**: Drag-drop with case selection
+
+#### 11. **AI Email Generator** (`/ai-email`)
+- **Template Selector**: Dropdown for email types
+- **Context Fields**: Case number, recipient selection
+- **Prompt Input**: Text area for AI instructions
+- **Generated Content**: Preview area with edit capability
+- **Send Options**: Direct send or copy to clipboard
+
+### FORM WORKFLOWS
+
+#### 1. **New Case Form**
+- Multi-section form with validation:
+  - Basic Information (rental company, lawyer)
+  - NAF Party Details
+  - AF Party Details
+  - Save & Close functionality
+
+#### 2. **JotForm Integration**
+- **Authority to Act Form**: 
+  - Pre-filled from case data
+  - Signature capture
+  - PDF generation on submission
+- **Claims Form**:
+  - Comprehensive accident details
+  - Multiple party information
+  - Document upload capability
+- **Webhook Processing**: Auto-update cases on form submission
+
+#### 3. **Digital Signature Workflow**
+1. Generate secure token with expiry
+2. Send email with signing link
+3. Capture signature via SignaturePad component
+4. Generate signed PDF
+5. Store encrypted in database
+6. Update case status
+
+### BUSINESS LOGIC & RULES
+
+#### 1. **Case Management**
+- Auto-generate case numbers (CASE-######)
+- Enforce status progression rules
+- Calculate financial summaries automatically
+- Track all changes with timestamps
+
+#### 2. **Access Control**
+- **Admin/Developer**: Full system access
+- **Lawyer**: Access to assigned cases only
+- **Rental Company**: Access to assigned cases only
+- **Workspace User**: Limited to workspace cases
+
+#### 3. **Fleet Management**
+- Prevent double-booking of bikes
+- Auto-calculate rental periods and costs
+- Track maintenance schedules
+- Generate rental agreements with terms
+
+#### 4. **Financial Tracking**
+- Auto-calculate outstanding amounts
+- Track payment history
+- Generate invoice summaries
+- Alert on overdue payments
+
+#### 5. **Communication Tracking**
+- Log all communications with timestamps
+- Set follow-up reminders
+- Priority-based sorting
+- Email template system
+
+### API ENDPOINTS
+
+#### Authentication
+- POST `/api/auth/login` - User login
+- POST `/api/auth/change-password` - Password change
+
+#### Cases
+- GET `/api/cases` - List cases (filtered by user role)
+- POST `/api/cases` - Create new case
+- GET `/api/cases/[id]` - Get case details
+- PUT `/api/cases/[id]` - Update case
+- DELETE `/api/cases/[id]/delete` - Delete case
+
+#### Fleet
+- GET `/api/bikes` - List all bikes
+- POST `/api/bikes` - Add new bike
+- PUT `/api/bikes/[id]` - Update bike
+- DELETE `/api/bikes/[id]` - Delete bike
+
+#### Documents
+- POST `/api/documents/send-for-signature` - Initiate signing
+- GET `/api/signature/validate-token` - Validate signing token
+- POST `/api/signature/submit` - Submit signature
+
+#### Forms
+- GET `/api/forms/[type]/[token]` - Get pre-filled form
+- POST `/api/forms/[type]/[token]/submit` - Submit form
+- POST `/api/webhooks/jotform` - JotForm webhook
+
+#### Communications
+- POST `/api/send-test-email` - Email testing
+- POST `/api/send-test-sms` - SMS testing
+
+### SECURITY FEATURES
+
+1. **Authentication**
+   - JWT tokens with expiry
+   - Secure password hashing
+   - Session management
+
+2. **Data Protection**
+   - Encrypted signature storage
+   - Secure token generation
+   - IP logging for signatures
+
+3. **Access Control**
+   - Role-based permissions
+   - Workspace isolation
+   - Contact-based filtering
+
+4. **Document Security**
+   - SHA256 hash verification
+   - Version tracking
+   - Audit trails
+
+### RESPONSIVE DESIGN
+
+- Mobile-first approach
+- Collapsible sidebar on mobile
+- Touch-friendly interfaces
+- Optimized table views for small screens
+- Card-based layouts for better mobile UX
+
+### ERROR HANDLING
+
+1. **User-Friendly Messages**
+   - Clear error descriptions
+   - Suggested actions
+   - Contact support options
+
+2. **Fallback Mechanisms**
+   - Local storage when database unavailable
+   - Cached data for offline viewing
+   - Queue system for failed operations
+
+3. **Validation**
+   - Frontend form validation
+   - Backend data validation
+   - Business rule enforcement
+
+### TESTING REQUIREMENTS
+
+1. **Unit Tests**
+   - Component testing
+   - API endpoint testing
+   - Business logic validation
+
+2. **Integration Tests**
+   - Form submission workflows
+   - Document signing process
+   - Payment calculations
+
+3. **E2E Tests**
+   - Complete user journeys
+   - Multi-role scenarios
+   - Error recovery paths
+
+### DEPLOYMENT CONFIGURATION
+
+1. **Environment Variables**
+   ```
+   DATABASE_URL
+   NEXTAUTH_SECRET
+   BREVO_API_KEY
+   JOTFORM_API_KEY
+   FIREBASE_CONFIG
+   ```
+
+2. **Build Process**
+   - TypeScript compilation
+   - Asset optimization
+   - Environment-specific configs
+
+3. **Monitoring**
+   - Error tracking
+   - Performance metrics
+   - User analytics
+
+This specification provides a complete blueprint for rebuilding the motorbike rental management system with all GUI components, business logic, and technical requirements clearly defined.
+1.2 Key User Personas
+Case Managers: Create and manage accident cases, assign bikes
+Financial Controllers: Track invoices, settlements, and payments
+Fleet Managers: Manage bike inventory and maintenance
+Collections Officers: Handle overdue accounts
+Clients: Sign rental agreements digitally
+2. DATA MODEL SPECIFICATIONS
+2.1 Case Entity
+Case {
+    case_number: String (Primary Key, Format: "WWMM###" - WW=Week, MM=Month, ###=Sequential)
+    workspace_id: String (Foreign Key to Workspace, Optional)
+    
+    // NAF (Not At Fault) Party Information
+    naf_name: String (Required)
+    naf_phone: String (Optional)
+    naf_email: String (Optional)
+    naf_street_address: String (Optional)
+    naf_suburb: String (Optional)
+    naf_state: String (Optional, Values: NSW, VIC, QLD, WA, SA, TAS, ACT, NT)
+    naf_postcode: String (Optional, 4 digits)
+    naf_claim: String (Optional - claim number)
+    naf_insurer: String (Optional - insurance company)
+    naf_license: String (Optional - driver's license)
+    naf_vehicle_reg: String (Optional - vehicle registration)
+    naf_version: String (Optional)
+    
+    // AF (At Fault) Party Information  
+    af_name: String (Required)
+    af_phone: String (Optional)
+    af_email: String (Optional)
+    af_street_address: String (Optional)
+    af_suburb: String (Optional)
+    af_state: String (Optional, Values: NSW, VIC, QLD, WA, SA, TAS, ACT, NT)
+    af_postcode: String (Optional, 4 digits)
+    af_claim: String (Optional - claim number)
+    af_insurer: String (Required - insurance company)
+    af_license: String (Optional - driver's license)
+    af_vehicle_reg: String (Optional - vehicle registration)
+    af_version: String (Optional)
+    
+    // Accident Information
+    accident_date: Date (Optional)
+    accident_time: String (Optional)
+    accident_location: String (Optional)
+    
+    // Case Management
+    status: String (Required, Default: "New Matter")
+    assigned_bike_id: Integer (Foreign Key to Bike, Optional)
+    assigned_collections_id: Integer (Foreign Key to CollectionsClient, Optional)
+    notes: Text (Optional - general case notes)
+    followup_notes: Text (Optional)
+    
+    // Financial Summary (Denormalized for performance)
+    invoiced: Decimal (Default: 0.00)
+    reserve: Decimal (Default: 0.00)
+    settled: Decimal (Default: 0.00)
+    paid: Decimal (Default: 0.00)
+    
+    // Timestamps
+    created_date: DateTime
+    modified_date: DateTime
+    id: Integer (Auto-increment)
+}
+Status Values:
+
+New Matter
+Customer Contacted
+Awaiting Approval
+Bike Delivered
+Bike Returned
+Demands Sent
+Awaiting Settlement
+Settlement Agreed
+Paid
+Closed
+2.2 Bike Entity
+Bike {
+    id: Integer (Primary Key, Auto-increment)
+    make: String (Required)
+    model: String (Required)
+    registration: String (Required, Unique, Uppercase)
+    registration_expiry: Date (Optional)
+    assigned_case: String (Foreign Key to Case.case_number, Optional)
+    service_center: String (Optional, Values: "Five Dock", "Seven Hills", "Reza")
+    delivery_street: String (Optional)
+    delivery_suburb: String (Optional)
+    delivery_state: String (Optional)
+    delivery_postcode: String (Optional, 4 digits)
+    last_service_date: Date (Optional)
+    service_notes: Text (Optional)
+    created_date: DateTime
+}
+2.3 Financial Record Entity
+FinancialRecord {
+    id: Integer (Primary Key, Auto-increment)
+    case_number: String (Foreign Key to Case.case_number)
+    invoiced: Decimal (Default: 0.00)
+    reserve: Decimal (Default: 0.00)
+    settlement_agreed: Decimal (Default: 0.00)
+    paid: Decimal (Default: 0.00)
+    settled: Decimal (Default: 0.00)
+    created_date: DateTime
+    modified_date: DateTime
+}
+2.4 Bike Assignment Entity
+BikeAssignment {
+    id: Integer (Primary Key, Auto-increment)
+    case_number: String (Foreign Key to Case.case_number)
+    bike_id: Integer (Foreign Key to Bike.id)
+    rate_a: Decimal (Daily rate A, Default: 0.00)
+    rate_b: Decimal (Daily rate B, Default: 0.00)
+    assigned_date: Date
+    returned_date: Date (Optional)
+    created_date: DateTime
+}
+2.5 Document Entity
+Document {
+    id: Integer (Primary Key, Auto-increment)
+    case_number: String (Foreign Key to Case.case_number)
+    filename: String (Required)
+    filepath: String (Required)
+    file_type: String (Optional)
+    uploaded_date: DateTime (Sydney timezone aware)
+}
+2.6 Insurance Company Entity
+Insurance {
+    id: Integer (Primary Key, Auto-increment)
+    name: String (Required, Unique)
+    phone: String (Optional)
+    email: String (Optional)
+    notes: Text (Optional)
+    created_date: DateTime
+}
+2.7 Collections Client Entity
+CollectionsClient {
+    id: Integer (Primary Key, Auto-increment)
+    company_name: String (Required)
+    contact_name: String (Required)
+    contact_email: String (Required)
+    phone: String (Optional)
+    created_date: DateTime
+    modified_date: DateTime
+}
+2.8 Follow-up Notes Entity
+FollowupNote {
+    id: Integer (Primary Key, Auto-increment)
+    case_number: String (Foreign Key to Case.case_number)
+    note_content: Text (Required)
+    created_date: DateTime
+    modified_date: DateTime
+}
+2.9 Communication Log Entity
+CommunicationLog {
+    id: Integer (Primary Key, Auto-increment)
+    case_number: String (Foreign Key to Case.case_number)
+    log_type: String (Required, Values: "Email", "Phone", "SMS", "Letter", "Meeting", "Other")
+    subject: String (Optional)
+    content: Text (Required)
+    contact_name: String (Optional)
+    contact_email: String (Optional)
+    contact_phone: String (Optional)
+    direction: String (Optional, Values: "Inbound", "Outbound")
+    duration_minutes: Integer (Optional)
+    tags: String (Optional, comma-separated)
+    priority: String (Default: "normal", Values: "low", "normal", "high", "urgent")
+    status: String (Default: "completed", Values: "completed", "pending", "cancelled")
+    follow_up_required: Boolean (Default: false)
+    follow_up_date: Date (Optional)
+    created_by: String (Optional)
+    created_date: DateTime (Sydney timezone)
+}
+2.10 Contact Entity
+Contact {
+    id: String (Primary Key)
+    name: String (Required)
+    company: String (Optional)
+    type: String (Required, Values: "Client", "Lawyer", "Insurer", "Repairer", "Other")
+    phone: String (Optional)
+    email: String (Optional)
+    address: String (Optional)
+}
+2.11 Workspace Entity
+Workspace {
+    id: String (Primary Key)
+    name: String (Required)
+    contactId: String (Foreign Key to Contact)
+}
+2.12 Digital Signature Entities
+SignatureToken {
+    token: String (Primary Key, SHA256 hash)
+    case_number: String (Foreign Key)
+    client_email: String
+    form_data: JSON
+    status: String (Default: "pending", Values: "pending", "accessed", "signed", "completed", "expired")
+    expires_at: DateTime
+    signed_at: DateTime (Optional)
+    completed_at: DateTime (Optional)
+    business_email: String (Optional)
+    document_type: String (Optional)
+    form_link: String (Optional)
+}
+
+RentalAgreement {
+    id: Integer (Primary Key)
+    case_number: String (Foreign Key)
+    agreement_number: String (Format: "RA-YYYYMMDD-####")
+    
+    // Vehicle Information
+    bike_make: String
+    bike_model: String
+    
+    // Rental Period
+    hire_date: Date
+    hire_time: String
+    return_date: Date
+    return_time: String
+    
+    // Primary Hirer Information
+    hirer1_name: String
+    hirer1_address: String
+    hirer1_suburb: String
+    hirer1_state: String
+    hirer1_postcode: String
+    hirer1_phone: String
+    hirer1_email: String
+    hirer1_license: String
+    hirer1_license_state: String
+    hirer1_dob: Date
+    hirer1_license_expiry: Date
+    
+    // Additional Driver Information
+    additional_driver: Boolean
+    hirer2_name: String (Optional)
+    hirer2_address: String (Optional)
+    hirer2_suburb: String (Optional)
+    hirer2_state: String (Optional)
+    hirer2_postcode: String (Optional)
+    hirer2_phone: String (Optional)
+    hirer2_license: String (Optional)
+    hirer2_license_state: String (Optional)
+    hirer2_dob: Date (Optional)
+    hirer2_license_expiry: Date (Optional)
+    
+    // Financial Information
+    fuel_out: String
+    fuel_in: String
+    daily_rate: Decimal
+    excess_reduction_rate: Decimal
+    admin_fee: Decimal
+    delivery_fee: Decimal
+    additional_driver_fee: Decimal
+    helmet_fee: Decimal
+    riding_apparel_fee: Decimal
+    gst_amount: Decimal
+    total_amount: Decimal
+    
+    status: String
+    created_date: DateTime
+}
+
+DigitalSignature {
+    id: Integer (Primary Key)
+    rental_agreement_id: Integer (Foreign Key)
+    signature_type: String (Values: "hirer1", "hirer2")
+    signature_data: Text (Base64 encoded image)
+    signature_hash: String (SHA256)
+    signer_name: String
+    signer_email: String
+    ip_address: String
+    user_agent: String
+    device_fingerprint: JSON
+    signed_at: DateTime
+    timezone: String
+    terms_accepted: Boolean
+    verification_code: String (UUID)
+}
+3. CORE FUNCTIONALITY SPECIFICATIONS
+3.1 DASHBOARD PAGE
+Route: / or /dashboard
+
+Purpose: Central hub showing system overview and key metrics
+
+Components:
+
+Financial Overview Panel
+
+Toggle View: Current Month / Financial Year
+Metrics displayed:
+Total Invoiced: Sum of all invoice amounts
+Total Paid: Sum of all payments received
+Settlement Agreed: Sum of all agreed settlements
+Outstanding: Settlement Agreed - Paid
+Total Reserve: Sum of all reserve amounts across cases
+Statistics Cards
+
+Total Cases: Count of all cases
+Unsettled Cases: Cases where settlement_agreed = 0
+Total Bikes: Count of all bikes in fleet
+Available Bikes: Bikes not currently assigned
+Assigned Bikes: Bikes currently on rental
+Recent Cases Table
+
+Shows last 10 cases sorted by modification date
+Columns: Case Number, Client Name, Status, Last Modified
+Each row clickable to view case details
+Business Logic:
+
+Financial calculations use Monthly Financial Tracker CSV system
+Current month shows running total from day 1 to today
+Financial year runs July 1 to June 30 (Australian FY)
+All amounts in AUD with 2 decimal precision
+3.2 CASES MODULE
+3.2.1 Cases List Page
+Route: /cases/
+
+Features:
+
+Search Bar
+
+Real-time search across: case number, client name, AF name, phone numbers, emails, vehicle registrations
+Case-insensitive matching
+Filters Panel
+
+Status Filter: Dropdown with all status values
+Insurer Filter: Dropdown populated from Insurance Companies + "Other" option
+Collections Filter: Dropdown of Collections Clients
+Hide Closed: Checkbox to exclude "Closed" status cases
+Filters expire after 30 minutes
+Cases Display
+
+Card-based layout (responsive grid)
+Each card shows:
+Case number (large, clickable)
+Client name and phone
+AF Insurance company (prominent)
+Status badge (color-coded)
+Financial summary: Invoiced, Paid, Outstanding
+Bike assignment status
+Quick action buttons: View, Edit
+Pagination
+
+20 cases per page
+Previous/Next navigation
+Shows "X-Y of Z" indicator
+Export Options
+
+Export to CSV button
+Print view button
+Business Logic:
+
+Cases sorted by creation date (newest first)
+Status colors:
+New Matter: Blue
+Customer Contacted: Info
+Awaiting Approval: Warning
+Bike Delivered: Primary
+Bike Returned: Secondary
+Demands Sent: Warning
+Settlement Agreed: Success
+Paid: Success
+Closed: Dark
+3.2.2 Create Case Page
+Route: /cases/create
+
+Form Sections:
+
+Collections Assignment (Top priority field)
+
+Dropdown of Collections Clients
+Optional field
+Client (NAF) Information
+
+Name* (required)
+Phone
+Email
+Address fields (Street, Suburb, State dropdown, Postcode)
+Claim Number
+Insurance Company (dropdown + manual entry)
+License Number
+Vehicle Registration (auto-uppercase)
+At-Fault (AF) Information
+
+Same fields as NAF
+Insurance Company is emphasized
+Accident Details
+
+Date of Loss (date picker)
+Time of Loss
+Location of Loss (textarea)
+Case Management
+
+Status (dropdown, defaults to "New Matter")
+Notes (textarea)
+Financial Information
+
+Invoiced Amount
+Reserve Amount
+Settlement Agreed
+Paid Amount
+Validation Rules:
+
+Case number auto-generated: WWMM### format
+Duplicate vehicle registration warning
+Recent duplicate detection (same names within 30 seconds)
+Email format validation
+Postcode must be 4 digits
+Phone number format flexible
+Business Logic:
+
+On duplicate registration detection:
+Show warning page listing existing cases
+Allow user to confirm creation
+Case number generation:
+WW = ISO week number
+MM = month number
+= sequential within week/month
+3.2.3 View Case Page
+Route: /cases/<case_number>
+
+Layout Sections:
+
+Header Bar
+
+Case number (large)
+Status badge
+Edit button
+Delete button (with confirmation)
+Client Information Card
+
+All NAF fields displayed
+Edit-in-place for email updates
+Map link for address
+At-Fault Information Card
+
+All AF fields displayed
+Insurance company prominent
+Edit-in-place capability
+Financial Overview Card
+
+Real-time editable fields:
+Invoiced
+Reserve
+Settlement Agreed
+Paid
+Auto-calculated: Outstanding
+Save happens on blur with AJAX
+Bike Assignment Card
+
+If assigned: Shows bike details, rental rates, days on rental
+If not assigned: "Assign Bike" button
+Rental summary with daily calculations
+Documents Section
+
+List of uploaded documents
+Upload new document button
+Document types: PDF, images
+Thumbnail previews for images
+Download links
+Notes Section
+
+General notes (textarea, auto-save)
+Follow-up notes list (timestamped)
+Add new follow-up note
+Communication Log Tab
+
+List of all communications
+Add new log entry
+Fields: Type, Subject, Content, Contact info, Priority, Follow-up
+Action Buttons Panel
+
+Send Document for Signing (Email/SMS)
+Download Claim Excel
+Collections Email
+View Rental Agreement
+3.2.4 Edit Case Page
+Route: /cases/<case_number>/edit
+
+Features:
+
+Same form as Create Case
+Pre-populated with current values
+AJAX save on each section
+Success/error notifications
+Timestamp detection to prevent data corruption
+3.3 BIKES MODULE
+3.3.1 Bikes List Page
+Route: /bikes/
+
+Display:
+
+Table format with columns:
+Make & Model
+Registration (uppercase)
+Status (Available/Assigned)
+Assigned To (case number if applicable)
+Service Center
+Registration Expiry
+Actions
+Features:
+
+Add New Bike button
+Assign Bike button
+Return Bike button
+Download Inventory Spreadsheet
+Color Coding:
+
+Available bikes: Green highlight
+Assigned bikes: Default
+Overdue registration: Red text
+3.3.2 Create/Edit Bike Page
+Route: /bikes/create or /bikes/<id>/edit
+
+Form Fields:
+
+Make* (required)
+Model* (required)
+Registration* (required, auto-uppercase, unique)
+Registration Expiry (date picker)
+Service Center (dropdown)
+Delivery Address fields
+Last Service Date
+Service Notes
+3.3.3 Assign Bike Page
+Route: /bikes/assign
+
+Interface:
+
+Case Selection
+
+Dropdown of active cases without bikes
+Shows: Case number - Client name
+Auto-populate delivery address from case
+Bike Selection
+
+Dropdown of available bikes
+Shows: Registration - Make Model
+Rental Rates
+
+Rate A: $ per day
+Rate B: $ per day
+Both default to 0.00
+Delivery Information
+
+Street Address
+Suburb
+State (dropdown)
+Postcode
+Business Logic:
+
+Creates bike_assignments record
+Updates bike.assigned_case
+Creates rental tracking CSV
+Calculates daily rental costs
+3.3.4 Return Bike Page
+Route: /bikes/return
+
+Process:
+
+Select case from dropdown (only shows cases with bikes)
+Confirm return
+System calculates:
+Total rental days
+Total cost (Rate A + Rate B) × Days
+Updates financial records
+3.4 FINANCIAL MODULE
+3.4.1 Financial Overview Page
+Route: /financial/
+
+Dashboard Sections:
+
+Period Selector
+
+Current Month view
+Financial Year view
+Custom month selector
+Summary Cards
+
+Total Invoiced
+Total Reserve
+Settlement Agreed
+Total Paid
+Outstanding
+Collection Rate %
+Monthly Performance Table
+
+Columns: Month, Invoiced, Reserve, Settlement, Paid, Outstanding
+Row highlighting:
+Completed months: Default
+Current month: Primary
+Future months: Muted
+Cases Table
+
+Sortable by financial values
+Quick edit capabilities
+Status indicators
+Export Options
+
+Monthly CSV
+Financial Year CSV
+All Data Excel
+Business Logic:
+
+Monthly tracking via CSV files
+Automatic archival at FY end
+Sydney timezone for all calculations
+3.5 DOCUMENTS MODULE
+3.5.1 Document Signing Selection Page
+Route: /document-signing/<case_number>
+
+Document Types Available:
+
+Rental Agreement
+
+Custom form with digital signature
+Pre-filled from case data
+Two signature areas (primary + additional driver)
+Certis Rental Agreement
+
+Alternative rental agreement format
+Enhanced layout
+Claim Form
+
+Insurance claim documentation
+Single signature required
+Authority to Act
+
+Legal authorization form
+JotForm integration
+Direction to Pay
+
+Payment direction to insurance
+JotForm integration
+For Each Document:
+
+Send via Email button
+Send via SMS button
+Preview button
+Configure default email
+3.5.1.1 Jotform Integration Workflow
+For documents managed via Jotform (e.g., Authority to Act, Direction to Pay), the following workflow will be implemented:
+
+Form Prefilling via URL Parameters:
+
+The system will not use the Jotform API for direct prefilling. Instead, it will dynamically construct a URL with query parameters to prepopulate the form fields.
+The client's data (name, address, etc.) from the case will be encoded into the URL.
+Limitation: Signature fields and file upload fields on Jotform cannot be prefilled via URL parameters. The client will always need to manually provide their signature.
+Sending the Form:
+
+The generated URL will be sent to the client via their preferred method (Email, SMS).
+Capturing the Submission:
+
+A webhook will be configured in Jotform to listen for form submissions.
+When a client submits a signed form, Jotform will send a notification to a specified endpoint in our system.
+This notification will contain the submissionID.
+Retrieving the Signed PDF:
+
+Upon receiving the submissionID from the webhook, the system will make an API call to Jotform to download the completed and signed PDF.
+The endpoint for this is https://api.jotform.com/pdf-converter/{formID}/fill-pdf?download=1&submissionID={submissionID}&apikey={apiKey}.
+Storing the Document:
+
+The retrieved PDF will be saved to the application's primary storage (e.g., Firebase Storage).
+A new record will be created in the Document entity, linking the PDF to the relevant case.
+3.5.2 Rental Agreement Form
+Route: /rental-agreement/<case_number>
+
+Form Sections:
+
+Email Configuration Bar
+
+Client Email (editable)
+Business Email (for receiving signed copy)
+Update buttons
+Vehicle Information
+
+Make & Model (from assigned bike)
+Registration
+Color
+Rental Period (date/time pickers)
+Primary Hirer Details
+
+Full name
+Complete address
+Phone
+Email
+License details (number, state, expiry)
+Date of birth
+Additional Driver (Optional)
+
+Checkbox to enable
+Same fields as primary
+Rental Charges
+
+Daily rate: $___
+Excess reduction: $___ per day
+Delivery fee: $___
+Additional driver: $38/day (if applicable)
+Helmet hire: $___
+Riding apparel: $___
+Admin fee: 4.8% of subtotal
+GST: 10%
+Total calculation (automatic)
+Terms and Conditions
+
+Scrollable text area
+Must accept checkbox
+Actions
+
+Save Draft
+Send for Signature (Email/SMS)
+Preview PDF
+Business Logic:
+
+All amounts include GST
+Admin fee = subtotal × 0.048
+GST = (subtotal + admin) × 0.10
+Rental days calculated from dates
+3.5.3 Secure Signature Portal
+Route: /secure-signature-portal/<token>
+
+Features:
+
+Verification
+
+Token validation
+Expiry check (72 hours)
+One-time use
+Form Display
+
+Read-only view of agreement
+Highlighted signature areas
+Digital Signature Capture
+
+Canvas-based signature pad
+Clear and undo options
+Touch/mouse support
+Signature preview
+Legal Compliance
+
+IP address capture
+User agent recording
+Timestamp (Sydney timezone)
+Device fingerprinting
+Terms acceptance checkbox
+Submission Process
+
+Generate PDF with embedded signatures
+Email to business address
+Save to database
+Google Drive backup
+Success confirmation page
+3.6 CONTACTS MODULE
+Route: /contacts/
+
+Purpose: Manage a central list of all contacts, such as clients, lawyers, and insurance representatives.
+
+Components:
+
+Contact List
+Searchable and filterable list of all contacts.
+Columns: Name, Company, Type, Phone, Email.
+Contact Creation/Editing
+Form to add or update contact details.
+Contact type is a dropdown (Client, Lawyer, Insurer, Repairer, Other).
+Business Logic:
+
+Contacts are global and can be associated with cases and workspaces.
+Provides a single source of truth for contact information.
+3.7 INSURANCE MODULE
+Route: /insurance/
+
+Features:
+
+Insurance Companies List
+
+Table with: Name, Phone, Email, Notes
+Add/Edit/Delete capabilities
+Used for dropdown populations
+Bulk Actions
+
+Import from CSV
+Export to Excel
+3.8 WORKSPACE MODULE
+Route: /workspaces/
+
+Purpose: Manage client-specific workspaces to segregate cases and data.
+
+Components:
+
+Workspace List
+Grouped by contact type (e.g., Lawyers, Insurers).
+Displays workspace name and associated contact.
+"Select" button to activate a workspace.
+Workspace Creation/Editing
+Form to create a new workspace.
+Requires a name and an associated contact from the central contacts list.
+Active Workspace Indicator
+A persistent indicator in the UI (e.g., in the header) showing the currently active workspace.
+A "Clear" button to return to the global view.
+Business Logic:
+
+When a workspace is active, the Cases list page is filtered to show only cases with the matching workspaceId.
+Creating a new case while a workspace is active automatically assigns the workspaceId to the new case.
+The system defaults to a global view (all cases) if no workspace is active.
+Contacts are managed centrally but can be associated with multiple workspaces.
+3.9 COLLECTIONS MODULE
+3.9.1 Collections Clients Management
+Route: /collections/
+
+Features:
+
+Client List
+
+Company name
+Contact person
+Email
+Phone
+Active cases count
+Add/Edit Client
+
+All fields required except phone
+3.9.2 Collections Email Interface
+Route: /cases/<case_number>/collections-email
+
+Process:
+
+Email Preview
+
+Auto-generated demand letter
+Includes all case details
+Financial summary
+Legal language
+Customization
+
+Editable recipient
+Editable subject
+Editable body
+Template variables
+Send Options
+
+Send Now
+Schedule
+Save as Draft
+Templates:
+
+Initial Demand
+Second Notice
+Final Notice
+Legal Action Warning
+3.8 ADMIN MODULE
+Features:
+
+Subscription Management
+
+Check subscription status
+View limits
+System Backups
+
+Manual backup trigger
+Restore from backup
+Automated daily backups
+User Management
+
+Simple email-based access
+No complex roles
+Configuration
+
+Business details
+Email settings
+SMS settings
+JotForm integration
+4. EXTERNAL INTEGRATIONS
+4.1 Email & SMS Service (Brevo)
+Transactional Emails: For case updates, invoices, and automated reminders.
+SMS Messaging: For sending document signing links, urgent alerts, and appointment reminders.
+Unified Templates: Centralized management of email and SMS templates for consistent branding and messaging.
+Delivery Tracking: Real-time analytics on delivery, open rates, and click-throughs for both email and SMS.
+Shortened URLs: Automatic URL shortening for links sent via SMS to improve readability and reduce costs.
+4.2 JotForm Integration
+Webhook reception
+PDF retrieval
+Form pre-filling
+Submission tracking
+4.3 Google Drive
+Automatic document backup
+Folder organization by case
+PDF storage
+4.5 Payment Processing (Stripe)
+Subscription management
+Not for case payments
+5. UI/UX SPECIFICATIONS
+5.1 Design System
+Color Palette:
+
+Primary: #007bff (Blue)
+Success: #28a745 (Green)
+Warning: #ffc107 (Yellow)
+Danger: #dc3545 (Red)
+Info: #17a2b8 (Cyan)
+Dark: #343a40
+Light: #f8f9fa
+Typography:
+
+Font Family: System fonts stack
+Headers: Bold, 1.5-2.5rem
+Body: Regular, 1rem
+Small text: 0.875rem
+Components:
+
+Cards
+
+White background
+Border: 1px solid #dee2e6
+Border radius: 0.25rem
+Padding: 1.25rem
+Shadow on hover
+Buttons
+
+Primary: Blue background, white text
+Secondary: Gray outline
+Danger: Red background
+Padding: 0.375rem 0.75rem
+Border radius: 0.25rem
+Forms
+
+Labels above fields
+Gray borders
+Focus: Blue outline
+Error: Red border
+Help text: Small, muted
+Tables
+
+Striped rows
+Hover highlight
+Responsive wrapper
+Sortable headers
+Navigation
+
+Top navbar
+Sticky position
+Dropdown menus
+Mobile hamburger
+5.2 Responsive Design
+Mobile first approach
+Breakpoints:
+Mobile: < 576px
+Tablet: 576px - 992px
+Desktop: > 992px
+5.3 Theme Support
+Light/Dark mode toggle
+Persistent preference
+CSS variables for theming
+6. TECHNICAL SPECIFICATIONS
+6.1 Technology Stack
+Frontend Framework: Next.js (React)
+Backend & Database: Firebase (Firestore, Authentication, Cloud Functions)
+Hosting: Firebase Hosting
+Styling: Tailwind CSS
+6.2 Architecture Pattern
+MVC (Model-View-Controller)
+RESTful API design
+Service layer for business logic
+6.3 Security Requirements
+Authentication
+
+Email-based magic links OR
+Simple username/password
+Authorization
+
+All routes require authentication
+Except: public signature portals
+Data Protection
+
+HTTPS only
+SQL injection prevention
+XSS protection
+CSRF tokens
+Privacy
+
+PII encryption at rest
+Audit logging
+Data retention policies
+6.4 Performance Requirements
+Page load: < 3 seconds
+API response: < 1 second
+Concurrent users: 50+
+Database queries optimized
+Caching for static data
+6.5 Reliability
+99.9% uptime target
+Automated backups
+Error logging
+Graceful error handling
+7. API ENDPOINTS SPECIFICATION
+7.1 Cases API
+GET    /api/cases                    # List all cases
+POST   /api/cases                    # Create new case
+GET    /api/cases/{case_number}      # Get case details
+PUT    /api/cases/{case_number}      # Update case
+DELETE /api/cases/{case_number}      # Delete case
+
+POST   /api/cases/{case_number}/notes            # Add note
+PUT    /api/cases/{case_number}/notes/{id}       # Update note
+DELETE /api/cases/{case_number}/notes/{id}       # Delete note
+
+POST   /api/cases/{case_number}/update-financial  # Update financials
+POST   /api/cases/{case_number}/update-status     # Update status
+POST   /api/cases/{case_number}/assign-collections # Assign to collections
+
+GET    /api/cases/{case_number}/communication-logs      # Get logs
+POST   /api/cases/{case_number}/communication-logs      # Create log
+PUT    /api/cases/{case_number}/communication-logs/{id} # Update log
+DELETE /api/cases/{case_number}/communication-logs/{id} # Delete log
+7.2 Bikes API
+GET    /api/bikes                    # List all bikes
+POST   /api/bikes                    # Create bike
+PUT    /api/bikes/{id}               # Update bike
+DELETE /api/bikes/{id}               # Delete bike
+
+POST   /api/bikes/assign             # Assign bike to case
+POST   /api/bikes/{id}/unassign      # Return bike
+GET    /api/bikes/available          # Get available bikes
+7.3 Financial API
+GET    /api/financial/summary        # Get financial summary
+GET    /api/financial/monthly/{month} # Get monthly data
+GET    /api/financial/fy/{year}      # Get financial year data
+POST   /api/financial/export         # Export financial data
+7.4 Documents API
+GET    /api/documents/{case_number}  # List case documents
+POST   /api/documents/upload         # Upload document
+DELETE /api/documents/{id}           # Delete document
+
+POST   /api/documents/send-for-signature     # Send doc for signing
+POST   /api/documents/check-signature-status # Check signature status
+GET    /api/documents/signature-portal/{token} # Access signature portal
+7.5 Communications API
+POST   /api/send-email               # Send email
+POST   /api/send-sms                 # Send SMS
+POST   /api/create-short-url         # Create shortened URL
+8. BUSINESS LOGIC RULES
+8.1 Case Number Generation
+Algorithm:
+1. Get current date
+2. Calculate ISO week number
+3. Get month number
+4. Query database for highest sequence in current week/month
+5. Increment sequence
+6. Format: WWMM### (e.g., 0512001)
+8.2 Financial Calculations
+Invoice Total = Sum of all charges
+Reserve = Estimated future costs
+Settlement Agreed = Negotiated settlement amount
+Paid = Actual payments received
+Outstanding = Settlement Agreed - Paid
+
+Monthly Totals:
+- Running total from day 1 to current day
+- Archived at month end
+- CSV-based tracking for audit trail
+8.3 Bike Rental Calculations
+Daily Rate = Rate A + Rate B
+Rental Days = (Return Date - Assign Date) + 1
+Total Rental = Daily Rate × Rental Days
+
+Automatic tracking:
+- CSV file per case
+- Daily entries
+- Running totals
+8.4 Status Progression Rules
+New Matter → Customer Contacted → Awaiting Approval → Bike Delivered
+Bike Delivered → Bike Returned → Demands Sent → Awaiting Settlement
+Awaiting Settlement → Settlement Agreed → Paid → Closed
+
+Constraints:
+- Cannot skip statuses
+- Bike must be assigned before "Bike Delivered"
+- Bike must be returned before "Demands Sent"
+- Financial data required for "Settlement Agreed"
+8.5 Document Signing Flow
+1. Admin initiates signing request
+2. System generates secure token (SHA256)
+3. Token valid for 72 hours
+4. Email/SMS sent with shortened URL
+5. Client accesses portal
+6. Client signs digitally
+7. PDF generated with embedded signatures
+8. PDF emailed to business
+9. PDF saved to database and Google Drive
+10. Token marked as used
+9. DATA VALIDATION RULES
+9.1 Email Validation
+Format: RFC 5322 compliant
+Required for digital signatures
+Unique per case party
+9.2 Phone Validation
+Australian format preferred
+International formats accepted
+SMS capability check for Australian numbers
+9.3 Registration Validation
+Uppercase conversion
+Alphanumeric only
+3-10 characters
+Uniqueness check
+9.4 Financial Validation
+Non-negative numbers only
+Two decimal places
+Maximum value: 999,999.99
+Currency: AUD only
+9.5 Date Validation
+Format: YYYY-MM-DD
+No future dates for historical data
+Rental end date ≥ start date
+Sydney timezone for all timestamps
+10. IMPLEMENTATION TASK LIST
+Phase 1: Foundation (Week 1-2)
+Database Setup
+
+Design and create all tables
+Set up indexes for performance
+Create foreign key constraints
+Implement audit triggers
+Set up backup procedures
+Core Models
+
+Implement Case model with all fields
+Implement Bike model
+Implement Financial Record model
+Implement all supporting models
+Create model validation methods
+Authentication System
+
+Implement login/logout
+Session management
+Remember me functionality
+Password reset flow
+Route protection middleware
+Phase 2: Case Management (Week 3-4)
+Cases CRUD
+
+List cases with search/filter
+Create case with validation
+View case with all sections
+Edit case with AJAX updates
+Delete case with confirmations
+Case Features
+
+Follow-up notes system
+Communication logs
+Status management
+Financial tracking
+Collections assignment
+Business Logic
+
+Case number generation
+Duplicate detection
+Status progression rules
+Financial calculations
+Monthly tracking system
+Phase 3: Bike Management (Week 5)
+Bike CRUD
+
+List bikes with status
+Add/Edit bike forms
+Delete with constraints
+Service tracking
+Registration expiry alerts
+Assignment System
+
+Assign bike interface
+Delivery address capture
+Rate configuration
+Return bike process
+Rental calculations
+Reporting
+
+Individual rental CSVs
+Monthly summaries
+Financial year reports
+Inventory spreadsheet
+Utilization metrics
+Phase 4: Financial Module (Week 6)
+Financial Tracking
+
+Overview dashboard
+Monthly performance
+Case-level financials
+Real-time updates
+Outstanding calculations
+Reporting
+
+Monthly CSV generation
+FY summary reports
+Export capabilities
+Audit trails
+Archival system
+Phase 5: Document Management (Week 7-8)
+Document System
+
+File upload interface
+Storage organization
+Thumbnail generation
+Preview capabilities
+Download tracking
+Digital Signatures
+
+Rental agreement forms
+Signature capture canvas
+PDF generation with signatures
+Secure portal system
+Token management
+Communication
+
+Email integration
+SMS capabilities
+URL shortening
+Template management
+Delivery tracking
+Phase 6: External Integrations (Week 9)
+Email/SMS Service
+
+Brevo API integration
+Template configuration
+Delivery webhooks
+Error handling
+Rate limiting
+JotForm Integration
+
+Webhook endpoints
+PDF retrieval
+Form pre-filling
+Submission tracking
+Error recovery
+Google Drive
+
+API authentication
+Folder structure
+Auto-upload system
+Sync verification
+Error handling
+Phase 7: Admin & Polish (Week 10)
+Admin Features
+
+Backup/Restore
+System configuration
+Insurance management
+Collections management
+Activity logs
+UI/UX Polish
+
+Responsive design
+Theme support
+Loading states
+Error messages
+Success notifications
+Performance
+
+Query optimization
+Caching implementation
+Lazy loading
+Image optimization
+Bundle optimization
+Phase 8: Testing & Deployment (Week 11-12)
+Testing
+
+Unit tests for models
+Integration tests for APIs
+End-to-end test scenarios
+Performance testing
+Security audit
+Documentation
+
+API documentation
+User manual
+Admin guide
+Deployment guide
+Troubleshooting guide
+Deployment
+
+Production environment setup
+SSL certificates
+Domain configuration
+Monitoring setup
+Backup automation
+11. CRITICAL BUSINESS WORKFLOWS
+11.1 New Case Creation Workflow
+1. Admin clicks "Create Case"
+2. Enters client (NAF) information
+3. Enters at-fault (AF) information - CRITICAL: Must capture AF insurer
+4. Enters accident details
+5. System generates case number (WWMM###)
+6. Checks for duplicate registrations
+7. Creates case record
+8. Creates default financial record
+9. Redirects to case view
+11.2 Bike Assignment Workflow
+1. From case view, click "Assign Bike"
+2. Select available bike
+3. Enter rental rates (Rate A, Rate B)
+4. Enter delivery address (auto-filled from case)
+5. System creates assignment record
+6. Updates bike status
+7. Creates rental tracking CSV
+8. Starts daily calculation job
+11.3 Digital Signature Workflow
+1. Admin opens case
+2. Clicks "Send for Signature"
+3. Chooses document type
+4. Enters/confirms client email
+5. System generates secure token
+6. Sends email with shortened URL
+7. Client clicks link
+8. Portal validates token
+9. Client reviews document
+10. Client draws signature
+11. Client accepts terms
+12. System generates PDF
+13. Emails PDF to business
+14. Saves to database
+15. Uploads to Google Drive
+11.4 Financial Settlement Workflow
+1. Case status: "Bike Returned"
+2. Admin enters settlement amount
+3. Status changes to "Settlement Agreed"
+4. System tracks payments
+5. When paid = settlement, status → "Paid"
+6. Admin can close case
+7. Monthly CSV updated
+8. Financial reports updated
+11.5 Collections Workflow
+1. Case has outstanding amount
+2. Admin assigns to collections client
+3. System generates demand email
+4. Admin reviews and sends
+5. Status updates to "Demands Sent"
+6. Collections client handles follow-up
+7. Payments tracked
+8. Commission calculations (if applicable)
+12. ERROR HANDLING SPECIFICATIONS
+12.1 User-Facing Errors
+Clear, non-technical messages
+Suggested actions
+Contact support option
+Error ID for tracking
+12.2 System Errors
+Detailed logging
+Stack traces in development
+Error aggregation
+Alerting for critical errors
+12.3 Validation Errors
+Field-level messages
+Inline display
+Focus on first error
+Clear resolution steps
+13. PERFORMANCE SPECIFICATIONS
+13.1 Response Times
+Page load: < 3 seconds
+AJAX calls: < 1 second
+Search: < 500ms
+File upload: Progress indicator
+13.2 Scalability
+Support 1000+ cases
+100+ concurrent users
+10GB+ document storage
+Archived data access
+14. COMPLIANCE & LEGAL
+14.1 Data Privacy
+PII protection
+Consent tracking
+Data retention policies
+Right to deletion
+14.2 Digital Signatures
+Legal compliance for Australia
+Audit trail maintenance
+Non-repudiation
+Time stamping
+14.3 Financial Records
+Audit trail for all changes
+Immutable historical data
+GST compliance
+Financial year alignment
+15. MONITORING & MAINTENANCE
+15.1 System Monitoring
+Uptime monitoring
+Performance metrics
+Error rate tracking
+Usage analytics
+15.2 Maintenance Tasks
+Daily backups
+Monthly archives
+Quarterly reviews
+Annual data cleanup
+16. FUTURE ENHANCEMENTS
+Mobile App
+
+Native iOS/Android apps
+Offline capability
+Push notifications
+Advanced Analytics
+
+Predictive settlement amounts
+Fraud detection
+Performance dashboards
+Automation
+
+Auto-assign bikes based on location
+Intelligent status progression
+Automated follow-ups
+Integrations
+
+Direct insurance APIs
+Accounting software sync
+CRM integration
+CONCLUSION
+This specification provides a complete blueprint for building a Motorbike Rental Management System. The system is designed to handle the complete lifecycle of accident cases, from initial client contact through to final payment collection.
+
+Key success factors:
+
+Accurate case and financial tracking
+Efficient bike fleet management
+Legally compliant digital signatures
+Automated document handling
+Comprehensive audit trails
+The implementation should focus on reliability, usability, and compliance with Australian business requirements. The modular architecture allows for phased development and future enhancements.
+
+Total estimated development time: 12 weeks for MVP with core features.
+
+Claims Form
+https://form.jotform.com/232543267390861
+Not At Fault Rental form
+https://form.jotform.com/233241680987464
+Certis Rental From
+https://form.jotform.com/233238940095055
+
+Authority to act
+https://form.jotform.com/233183619631457
+
+Direction to pay
+https://form.jotform.com/233061493503046
+
+
+
+Jotform
+
+
+stripe
+
+
+# Brevo Email Service Configuration
+BREVO_API_KEY=
+BREVO_SENDER_EMAIL=whitepointer2016@gmail.com
+BREVO_SENDER_NAME=White Pointer 
+
+
+Claims Form
+https://form.jotform.com/232543267390861
+Not At Fault Rental form
+https://form.jotform.com/233241680987464
+Certis Rental From
+https://form.jotform.com/233238940095055
+
+Authority to act
+https://form.jotform.com/233183619631457
+
+Direction to pay
+https://form.jotform.com/233061493503046
+
+{{ ... }}
+
+────────────────────────────────────
+15. FORM COMPONENT TEMPLATES (Next.js 14 + shadcn/ui)
+────────────────────────────────────
+Below is production-ready code for the **Authority to Act** form.  Follow the same pattern for ClaimsForm, NotAtFaultRentalForm, and CertisRentalForm by mapping their field tables.
+
+File: `src/app/(workspace)/cases/[caseId]/forms/AuthorityToActForm.tsx`
+```tsx
+'use client';
+import React from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import SignatureCanvas from 'react-signature-canvas';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useFirestore } from '@/lib/hooks/useFirestore';
+
+const STATE_OPTIONS = ['NSW', 'VIC', 'QLD', 'SA', 'TAS', 'WA', 'NT', 'ACT'] as const;
+
+const schema = z.object({
+  clientName: z.string().min(2),
+  clientAddress: z.string().min(3),
+  clientSuburb: z.string(),
+  clientState: z.enum(STATE_OPTIONS),
+  clientPostcode: z.string(),
+  clientEmail: z.string().email(),
+  clientPhone: z.string(),
+  accidentDate: z.string(),
+  claimNumber: z.string(),
+  insurerName: z.string(),
+  vehicleReg: z.string(),
+  signature: z.string(), // base64 PNG
+  dateSigned: z.string()
+});
+
+export type AuthorityToActFormData = z.infer<typeof schema>;
+
+export default function AuthorityToActForm({ caseId }: { caseId: string }) {
+  const { saveForm } = useFirestore();
+  const sigRef = React.useRef<SignatureCanvas | null>(null);
+  const {
+    register,
+    control,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting }
+  } = useForm<AuthorityToActFormData>({ resolver: zodResolver(schema) });
+
+  const onSubmit = async (data: AuthorityToActFormData) => {
+    const signaturePng = sigRef.current?.getTrimmedCanvas().toDataURL('image/png');
+    await saveForm(`cases/${caseId}/forms/authorityToAct`, { ...data, signature: signaturePng });
+  };
+
+  const clientName = watch('clientName');
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-xl">
+      {/* Statement */}
+      <p className="text-sm italic">
+        I <span className="font-semibold underline px-2">{clientName || '_________'}</span> appoint White Pointer to act on my behalf …
+      </p>
+
+      <Input label="Full Name" {...register('clientName')} error={errors.clientName?.message} />
+      <Textarea label="Street Address" {...register('clientAddress')} />
+
+      <div className="grid grid-cols-3 gap-2">
+        <Input label="Suburb" {...register('clientSuburb')} />
+        <Select {...register('clientState')}>
+          <SelectTrigger>
+            <SelectValue placeholder="State" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATE_OPTIONS.map(s => (
+              <SelectItem key={s} value={s}>{s}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input label="Postcode" {...register('clientPostcode')} />
+      </div>
+
+      <Input label="Email" type="email" {...register('clientEmail')} />
+      <Input label="Phone" {...register('clientPhone')} />
+      <Input label="Accident Date" type="date" {...register('accidentDate')} />
+      <Input label="Claim Number" {...register('claimNumber')} />
+      <Input label="At-Fault Insurer" {...register('insurerName')} />
+      <Input label="Bike Rego" {...register('vehicleReg')} />
+
+      {/* Signature Pad */}
+      <div>
+        <label className="block text-sm mb-1">Signature</label>
+        <SignatureCanvas
+          penColor="#0E61FF"
+          canvasProps={{ className: 'border w-full h-32' }}
+          ref={sigRef}
+        />
+      </div>
+
+      <Input label="Date Signed" type="date" {...register('dateSigned')} />
+
+      <Button type="submit" disabled={isSubmitting}>Submit</Button>
+    </form>
+  );
+}
+
+// =====================================================
+// ClaimsForm.tsx – Claim Form (JotForm 232543267390861)
+// =====================================================
+```tsx
+'use client';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import SignatureCanvas from 'react-signature-canvas';
+import { Input, Textarea, Select, Button } from '@/components/ui';
+import { useFirestore } from '@/lib/hooks/useFirestore';
+
+const LIC_STATES = ['NSW','VIC','QLD','SA','TAS','WA','NT','ACT'] as const;
+const YESNO = ['Yes','No'] as const;
+
+const schema = z.object({
+  claimantName: z.string().min(2),
+  dob: z.string(),
+  address: z.string(),
+  suburb: z.string(),
+  state: z.enum(LIC_STATES),
+  postcode: z.string(),
+  phone: z.string(),
+  email: z.string().email(),
+  driverAtAccident: z.enum(YESNO),
+  licenceNumber: z.string(),
+  licState: z.enum(LIC_STATES),
+  accidentDate: z.string(),
+  accidentTime: z.string(),
+  accidentLocation: z.string(),
+  policeNotified: z.enum(YESNO),
+  incidentNumber: z.string().optional(),
+  ownInsurer: z.string().optional(),
+  bikeMake: z.string(),
+  bikeModel: z.string(),
+  bikeReg: z.string(),
+  afInsurer: z.string().optional(),
+  claimNumber: z.string().optional(),
+  afDriverName: z.string().optional(),
+  afVehicleReg: z.string().optional(),
+  damageDescription: z.string(),
+  uploadPhotos: z.any().optional(),
+  signature: z.string(),
+  dateSigned: z.string()
+});
+
+type FormData = z.infer<typeof schema>;
+
+export default function ClaimsForm({ caseId }: { caseId: string }) {
+  const { saveForm } = useFirestore();
+  const sigRef = React.useRef<SignatureCanvas | null>(null);
+  const { register, handleSubmit, formState:{errors} } = useForm<FormData>({resolver:zodResolver(schema)});
+  const onSubmit = async (data: FormData) => {
+    const signature = sigRef.current?.getTrimmedCanvas().toDataURL();
+    await saveForm(`cases/${caseId}/forms/claim`, { ...data, signature });
+  };
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <Input label="Full Name" {...register('claimantName')} />
+      <Input label="Date of Birth" type="date" {...register('dob')} />
+      <Textarea label="Street Address" {...register('address')} />
+      {/* suburb/state/post */}
+      <div className="grid grid-cols-3 gap-2">
+        <Input label="Suburb" {...register('suburb')} />
+        <Select label="State" options={LIC_STATES} {...register('state')} />
+        <Input label="Postcode" {...register('postcode')} />
+      </div>
+      {/* rest of fields truncated for brevity */}
+      <div>
+        <label className="text-sm">Signature</label>
+        <SignatureCanvas ref={sigRef} penColor="#0E61FF" canvasProps={{className:'border w-full h-32'}} />
+      </div>
+      <Input label="Date Signed" type="date" {...register('dateSigned')} />
+      <Button type="submit">Submit</Button>
+    </form>
+  );
+}
+```
+
+// =====================================================
+// NotAtFaultRentalForm.tsx – Rental Agreement (JotForm 233241680987464)
+// =====================================================
+```tsx
+'use client';
+// imports identical to ClaimsForm ...
+const schemaNAF = z.object({
+  hirerName: z.string(),
+  hirerDOB: z.string(),
+  hirerLicense: z.string(),
+  hirerLicenseState: z.enum(LIC_STATES),
+  hirerEmail: z.string().email(),
+  hirerPhone: z.string(),
+  address: z.string(),
+  bikeMake: z.string(),
+  bikeModel: z.string(),
+  bikeReg: z.string(),
+  hireStart: z.string(),
+  hireEnd: z.string(),
+  rateA: z.string(),
+  rateB: z.string(),
+  excessReduction: z.string(),
+  deliveryFee: z.string().optional(),
+  termsAccepted: z.boolean(),
+  signatureHirer: z.string(),
+  dateSigned: z.string()
+});
+// component similar to above saving to `forms/nafRental`
+```
+
+// =====================================================
+// CertisRentalForm.tsx – Certis Agreement (JotForm 233238940095055)
+// =====================================================
+```tsx
+'use client';
+// imports ...
+const schemaCertis = z.object({
+  certisRef: z.string(),
+  clientName: z.string(),
+  clientDOB: z.string(),
+  clientLicence: z.string(),
+  licState: z.enum(LIC_STATES),
+  clientEmail: z.string().email(),
+  clientPhone: z.string(),
+  address: z.string(),
+  insurerName: z.string(),
+  claimNumber: z.string(),
+  accidentDate: z.string(),
+  bikeMake: z.string(),
+  bikeModel: z.string(),
+  bikeReg: z.string(),
+  hireFrom: z.string(),
+  hireTo: z.string(),
+  dailyRate: z.string(),
+  bondAmt: z.string(),
+  deliveryFee: z.string().optional(),
+  pickupFee: z.string().optional(),
+  signature: z.string(),
+  dateSigned: z.string()
+});
+// component similar, save to `forms/certisRental`
+```
+
+Skeletons for other forms:
+```tsx
+// ClaimsForm.tsx – replicate fields from table G
+// NotAtFaultRentalForm.tsx – replicate fields from table C
+// CertisRentalForm.tsx – replicate fields from table H
+```
+Keep identical patterns (react-hook-form + zod + shadcn/ui).  Ensure number inputs use `type="number"` and currency masking where desired.
+
+────────────────────────────────────
+17. END OF TECHNICAL ADDITIONS – the LLM should now have **all** GUI specs, data models, build tasks, document templates, and fully-fledged form code to generate the new app in one shot.
+
+{{ ... }}
+END OF PROMPT
+
+# Main Workspace Implementation - COMPLETED
+
+## ✅ Overview
+
+The Main Workspace has been successfully created and configured for both developer accounts. This special workspace shows **ALL cases** across all workspaces and unassigned cases, providing a comprehensive view for admin users.
+
+## 🏢 What Was Created
+
+### 1. Main Contact
+- **Name**: Main
+- **Type**: Service Center  
+- **Company**: Main Administration
+- **Email**: admin@main.system
+- **ID**: contact-1753810437008
+
+### 2. Main Workspace
+- **Name**: Main Workspace
+- **Contact ID**: contact-1753810437008
+- **Workspace ID**: workspace-1753810437159
+
+## 🔧 Technical Implementation
+
+### Core Features
+1. **Special Filtering Logic**: Main Workspace bypasses workspace filtering and shows ALL cases
+2. **Prominent Display**: Featured section at top of workspaces page
+3. **Header Integration**: Displays "Main Workspace" in the top navigation
+4. **Case Creation**: Cases created from Main Workspace are not assigned to any workspace
+
+### Files Modified
+
+#### 1. Cases Page (`src/app/(app)/cases/page.tsx`)
+```typescript
+// Updated filtering logic
+if (activeWorkspace.name === 'Main Workspace') {
+  visibilityPassed = true; // Shows ALL cases
+} else {
+  visibilityPassed = c.workspaceId === activeWorkspace.id;
+}
+
+// Updated case creation
+workspaceId: activeWorkspace?.name === 'Main Workspace' ? undefined : activeWorkspace?.id,
+
+// Updated description
+{activeWorkspace.name === 'Main Workspace' 
+  ? 'Showing all cases across all workspaces and unassigned cases'
+  : `Showing cases filtered by ${activeWorkspace.type}: ${activeWorkspace.name}`
+}
+```
+
+#### 2. User Header (`src/components/user-header.tsx`)
+```typescript
+// Updated display logic
+{activeWorkspace ? (
+  activeWorkspace.name === 'Main Workspace' ? (
+    <span>Main Workspace</span>
+  ) : (
+    <>
+      <span className="text-muted-foreground text-sm font-normal">{activeWorkspace.type}:</span>
+      <span className="ml-1">{activeWorkspace.name} Workspace</span>
+    </>
+  )
+) : (
+  currentUser?.role === "admin" ? "Main Workspace" : "Dashboard"
+)}
+
+// Hide "Back to Main" button when already in Main Workspace
+{activeWorkspace && currentUser?.role === "admin" && activeWorkspace.name !== 'Main Workspace' && (
+  <Button onClick={clearWorkspace}>Back to Main</Button>
+)}
+```
+
+#### 3. Workspaces Page (`src/app/(app)/workspaces/page.tsx`)
+```typescript
+// Added special Main Workspace section
+{workspaces.find(ws => ws.name === 'Main Workspace') && (
+  <div className="mb-6 p-4 border rounded-lg bg-primary/5">
+    <h3 className="text-lg font-semibold mb-2">Main Workspace</h3>
+    <p className="text-sm text-muted-foreground mb-3">View all cases across all workspaces and unassigned cases</p>
+    <Card 
+      className="cursor-pointer transition-all hover:shadow-lg border-primary/20 hover:border-primary/50"
+      onClick={() => handleSelectWorkspace(workspaces.find(ws => ws.name === 'Main Workspace')!.id)}
+    >
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-primary">
+          <Building /> Main Workspace
+        </CardTitle>
+        <CardDescription>Shows all cases without filtering</CardDescription>
+      </CardHeader>
+    </Card>
+  </div>
+)}
+```
+
+## 🎯 User Experience
+
+### For Admin Users (michaelalanwilson@gmail.com & whitepointer2016@gmail.com)
+
+1. **Default State**: When no workspace is selected, shows "Main Workspace" in header
+2. **Workspace Selection**: Can go to `/workspaces` and see Main Workspace prominently featured
+3. **Main Workspace Active**: 
+   - Header shows "Main Workspace"
+   - Cases page shows "Workspace: Main Workspace"
+   - Description: "Showing all cases across all workspaces and unassigned cases"  
+   - No "Back to Main" button (already in main)
+4. **All Cases Visible**: Sees every case in the system regardless of workspace assignment
+5. **Case Creation**: New cases created from Main Workspace are unassigned to any workspace
+
+### Visual Hierarchy
+```
+Main Workspace (Special - Shows ALL cases)
+├── Insurers
+│   └── Various insurer workspaces (filtered view)
+├── Lawyers  
+│   └── Various lawyer workspaces (filtered view)
+└── Rental Companies
+    └── Various rental company workspaces (filtered view)
+```
+
+## 🚀 How to Use
+
+### Step 1: Access Workspaces
+1. Log in as admin (michaelalanwilson@gmail.com or whitepointer2016@gmail.com)
+2. Go to `/workspaces` page
+3. See Main Workspace prominently displayed at the top
+
+### Step 2: Select Main Workspace
+1. Click on the Main Workspace card
+2. You'll be redirected to `/cases`
+3. Header will show "Main Workspace"
+4. All cases will be visible regardless of workspace assignment
+
+### Step 3: Switch Between Views
+1. **To filter by specific workspace**: Go back to `/workspaces` and select any other workspace
+2. **To return to Main**: Click "Back to Main" button in header, or select Main Workspace again
+
+## ✅ Testing Checklist
+
+- [x] ✅ Main Workspace created in database
+- [x] ✅ Main Workspace displays prominently on workspaces page
+- [x] ✅ Main Workspace shows in header when selected
+- [x] ✅ Main Workspace shows ALL cases (no filtering)
+- [x] ✅ Cases created from Main Workspace are unassigned
+- [x] ✅ No "Back to Main" button when in Main Workspace
+- [x] ✅ Description clearly indicates comprehensive view
+
+## 🔍 Database Verification
+
+Current workspaces in system:
+- **David - Not At Fault Workspace** (ID: workspace-david-001)
+- **Main Workspace** (ID: workspace-1753810437159) ← **NEW**
+
+Current contacts in system:
+- City Wide Rentals (Rental Company)
+- David (Rental Company) 
+- Davis Legal (Lawyer)
+- **Main (Service Center)** (ID: contact-1753810437008) ← **NEW**
+- Smith & Co Lawyers (Lawyer)
+
+## 🎉 Result
+
+**Both developer accounts (michaelalanwilson@gmail.com and whitepointer2016@gmail.com) now have access to the Main Workspace which shows ALL cases without any workspace filtering, exactly as requested.**
+
+The implementation provides:
+- ✅ Main Workspace as an actual workspace entity (not just UI label)
+- ✅ Shows all cases without workspace filter
+- ✅ Available to both developer logins
+- ✅ Prominent display and clear functionality
+- ✅ Proper integration with existing workspace system

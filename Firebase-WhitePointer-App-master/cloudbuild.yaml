@@ -1,0 +1,300 @@
+# Cloud Build configuration for CI/CD pipeline
+# Enterprise-grade build pipeline with security scanning and multi-stage deployment
+
+substitutions:
+  _REGION: us-central1
+  _ARTIFACT_REGISTRY: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ENVIRONMENT}-docker
+  _GKE_CLUSTER: ${_ENVIRONMENT}-gke-cluster
+  _DEPLOY_BRANCH: main
+  _ENVIRONMENT: production
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+  pool:
+    name: 'projects/${PROJECT_ID}/locations/${_REGION}/workerPools/secure-pool'
+
+# Build steps
+steps:
+  # Step 1: Security scanning of source code
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'security-scan-source'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Running security scans..."
+        docker run --rm -v "$PWD":/src \
+          aquasec/trivy:latest fs --security-checks vuln,config \
+          --severity HIGH,CRITICAL \
+          --exit-code 1 /src || true
+
+  # Step 2: Install dependencies and run tests
+  - name: 'node:18-alpine'
+    id: 'install-and-test'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        cd Firebase-WhitePointer-App-master
+        npm ci --production=false
+        npm run lint
+        npm run typecheck
+        npm run test:unit
+        npm run test:integration
+    env:
+      - 'NODE_ENV=test'
+      - 'CI=true'
+
+  # Step 3: Build application
+  - name: 'node:18-alpine'
+    id: 'build-app'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        cd Firebase-WhitePointer-App-master
+        npm run build
+        echo "Build completed successfully"
+
+  # Step 4: Build Docker images for microservices
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-api-gateway'
+    args:
+      - 'build'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/api-gateway:${SHORT_SHA}'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/api-gateway:latest'
+      - '-f'
+      - 'Firebase-WhitePointer-App-master/docker/api-gateway/Dockerfile'
+      - '--build-arg'
+      - 'NODE_ENV=production'
+      - '--cache-from'
+      - '${_ARTIFACT_REGISTRY}/api-gateway:latest'
+      - 'Firebase-WhitePointer-App-master'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-case-service'
+    args:
+      - 'build'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/case-service:${SHORT_SHA}'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/case-service:latest'
+      - '-f'
+      - 'Firebase-WhitePointer-App-master/docker/case-service/Dockerfile'
+      - '--build-arg'
+      - 'NODE_ENV=production'
+      - '--cache-from'
+      - '${_ARTIFACT_REGISTRY}/case-service:latest'
+      - 'Firebase-WhitePointer-App-master'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-document-service'
+    args:
+      - 'build'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/document-service:${SHORT_SHA}'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/document-service:latest'
+      - '-f'
+      - 'Firebase-WhitePointer-App-master/docker/document-service/Dockerfile'
+      - '--build-arg'
+      - 'NODE_ENV=production'
+      - '--cache-from'
+      - '${_ARTIFACT_REGISTRY}/document-service:latest'
+      - 'Firebase-WhitePointer-App-master'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-fleet-service'
+    args:
+      - 'build'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/fleet-service:${SHORT_SHA}'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/fleet-service:latest'
+      - '-f'
+      - 'Firebase-WhitePointer-App-master/docker/fleet-service/Dockerfile'
+      - '--build-arg'
+      - 'NODE_ENV=production'
+      - '--cache-from'
+      - '${_ARTIFACT_REGISTRY}/fleet-service:latest'
+      - 'Firebase-WhitePointer-App-master'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-auth-service'
+    args:
+      - 'build'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/auth-service:${SHORT_SHA}'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/auth-service:latest'
+      - '-f'
+      - 'Firebase-WhitePointer-App-master/docker/auth-service/Dockerfile'
+      - '--build-arg'
+      - 'NODE_ENV=production'
+      - '--cache-from'
+      - '${_ARTIFACT_REGISTRY}/auth-service:latest'
+      - 'Firebase-WhitePointer-App-master'
+
+  # Step 5: Scan Docker images for vulnerabilities
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'scan-images'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        for service in api-gateway case-service document-service fleet-service auth-service; do
+          echo "Scanning $service..."
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --severity HIGH,CRITICAL \
+            --exit-code 0 ${_ARTIFACT_REGISTRY}/$service:${SHORT_SHA}
+        done
+
+  # Step 6: Push images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-images'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        for service in api-gateway case-service document-service fleet-service auth-service; do
+          docker push ${_ARTIFACT_REGISTRY}/$service:${SHORT_SHA}
+          docker push ${_ARTIFACT_REGISTRY}/$service:latest
+        done
+
+  # Step 7: Generate Kubernetes manifests
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'generate-k8s-manifests'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        mkdir -p k8s-manifests
+        for service in api-gateway case-service document-service fleet-service auth-service; do
+          sed "s|IMAGE_TAG|${_ARTIFACT_REGISTRY}/$service:${SHORT_SHA}|g" \
+              Firebase-WhitePointer-App-master/k8s/base/$service.yaml > k8s-manifests/$service.yaml
+        done
+
+  # Step 8: Deploy to staging (if not main branch)
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: 'deploy-staging'
+    args:
+      - 'run'
+      - '--filename=k8s-manifests/'
+      - '--cluster=${_GKE_CLUSTER}'
+      - '--location=${_REGION}'
+      - '--namespace=staging'
+    waitFor: ['generate-k8s-manifests']
+    # Only run for non-main branches
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ "$BRANCH_NAME" != "main" ]; then
+          /gke-deploy run --filename=k8s-manifests/ \
+            --cluster=${_GKE_CLUSTER} \
+            --location=${_REGION} \
+            --namespace=staging
+        fi
+
+  # Step 9: Run smoke tests
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'smoke-tests'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Running smoke tests..."
+        # Get cluster credentials
+        gcloud container clusters get-credentials ${_GKE_CLUSTER} --region=${_REGION}
+        
+        # Wait for services to be ready
+        kubectl wait --for=condition=ready pod -l app=api-gateway -n staging --timeout=300s
+        
+        # Run smoke tests
+        kubectl run smoke-test --rm -i --restart=Never --image=curlimages/curl:latest -- \
+          sh -c "curl -f http://api-gateway.staging.svc.cluster.local/health || exit 1"
+
+  # Step 10: Deploy to production (only for main branch)
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: 'deploy-production'
+    args:
+      - 'run'
+      - '--filename=k8s-manifests/'
+      - '--cluster=${_GKE_CLUSTER}'
+      - '--location=${_REGION}'
+      - '--namespace=production'
+    waitFor: ['smoke-tests']
+    # Only run for main branch
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ "$BRANCH_NAME" = "main" ]; then
+          # Create canary deployment first
+          /gke-deploy run --filename=k8s-manifests/ \
+            --cluster=${_GKE_CLUSTER} \
+            --location=${_REGION} \
+            --namespace=production \
+            --labels=version=canary,commit=${SHORT_SHA}
+          
+          # Wait and monitor canary
+          sleep 300
+          
+          # If canary is healthy, proceed with full deployment
+          /gke-deploy run --filename=k8s-manifests/ \
+            --cluster=${_GKE_CLUSTER} \
+            --location=${_REGION} \
+            --namespace=production
+        fi
+
+  # Step 11: Database migrations
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'run-migrations'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Running database migrations..."
+        gcloud sql connect ${_ENVIRONMENT}-postgres-primary --user=postgres << EOF
+        \c whitepointer_cases
+        -- Run migration scripts
+        EOF
+
+  # Step 12: Update monitoring dashboards
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'update-monitoring'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Updating monitoring dashboards..."
+        gcloud monitoring dashboards create --config-from-file=monitoring/dashboards/production.json || \
+        gcloud monitoring dashboards update production-dashboard --config-from-file=monitoring/dashboards/production.json
+
+# Build artifacts to store
+artifacts:
+  objects:
+    location: 'gs://${PROJECT_ID}-build-artifacts/${_ENVIRONMENT}/${BUILD_ID}'
+    paths:
+      - 'Firebase-WhitePointer-App-master/dist/**/*'
+      - 'k8s-manifests/**/*'
+      - 'test-results/**/*'
+
+# Images to push
+images:
+  - '${_ARTIFACT_REGISTRY}/api-gateway:${SHORT_SHA}'
+  - '${_ARTIFACT_REGISTRY}/api-gateway:latest'
+  - '${_ARTIFACT_REGISTRY}/case-service:${SHORT_SHA}'
+  - '${_ARTIFACT_REGISTRY}/case-service:latest'
+  - '${_ARTIFACT_REGISTRY}/document-service:${SHORT_SHA}'
+  - '${_ARTIFACT_REGISTRY}/document-service:latest'
+  - '${_ARTIFACT_REGISTRY}/fleet-service:${SHORT_SHA}'
+  - '${_ARTIFACT_REGISTRY}/fleet-service:latest'
+  - '${_ARTIFACT_REGISTRY}/auth-service:${SHORT_SHA}'
+  - '${_ARTIFACT_REGISTRY}/auth-service:latest'
+
+# Timeout for the entire build
+timeout: '3600s'

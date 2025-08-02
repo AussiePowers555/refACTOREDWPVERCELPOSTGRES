@@ -1,0 +1,19 @@
+# Render deployment configuration
+services:
+  - type: web
+    name: whitepointer-app
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: ./render-build.sh
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /opt/render/project/src/data/pbike-rescue.db
+    disk:
+      name: sqlite-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+    healthCheckPath: /api/health
